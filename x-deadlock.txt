@@ -1,0 +1,49 @@
+
+
+V: 15,625
+
+p1: 
+ te: 15,625
+ dl: 19,531.25
+ vrt: 16000000
+
+
+==> join: p2; lag 8000000; t_g_i_s: 0
+
+V: 7,812.5
+
+p1: 
+ te: 15,625
+ dl: 19,531.25
+ vrt: 16000000
+
+p2:
+ te: 7,812.5
+ dl: 11,718.75
+ vrt: 0
+
+==> tick
+
+V: 9,765.625
+
+p1: 
+ te: 15,625
+ dl: 19,531.25
+ vrt: 16000000
+
+p2:
+ te: 11,718.75
+ dl: 15,625
+ vrt: 4000000
+
+==> ------------------ DEADLOCK ------------------
+
+
+
+
+
+
+Is there a scenario in which case it would make a process that we really don't want to be eligible be it?
+What we didn't like about the linux way was that things became INeligible too quick
+Things being eligible is fine, because the deadline first thing will ensure that something silly isnt' run? It will benefit things 
+with smaller slices, but they were owed service anyway. 

@@ -4,3 +4,4 @@ pyvenv.cfg
 lib/*
 include/*
 bin/*
+share/*

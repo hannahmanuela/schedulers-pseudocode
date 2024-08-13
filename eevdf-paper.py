@@ -77,7 +77,7 @@ def EEVDF_dispatch():
 
     # get eligible request with earliest virtual dead line 
     # TODO ignoring for now - interaction with req tree
-    client : sched_entity = get_best_client()
+    client : sched_entity
     
     # allocate resource to client with earliest eligible virtual dead line
     used = allocate(client)
