@@ -3,6 +3,7 @@ from dataclasses import dataclass, field
 from typing import Optional
 import matplotlib.pyplot as plt
 from collections import defaultdict
+import random
 
 
 @dataclass
@@ -60,9 +61,14 @@ def pick_eevdf(rq : rq_struct):
     
     rq.curr = next_se
 
+    event = scheduling_event(rq.curr.pid, "pick", rq.real_time, rq.virt_time, rq.real_time, rq.virt_time, rq.curr.time_eligible, rq.curr.deadline)
+    if verbose:
+        print(event)
+    rq.timeline.append(event)
+
 
 def entity_eligible(rq : rq_struct, se : sched_entity) -> bool:
-    return rq.virt_time >= se.time_eligible or ((se.weight * rq.virt_time - se.vruntime) > 0)
+    return rq.virt_time >= se.time_eligible or lag(rq, se) > 0
 
 
 def update_deadline(rq: rq_struct) -> bool:
@@ -183,33 +189,31 @@ def linux_boot(rq : rq_struct):
     # all procs have default weight and slice
     p1 = sched_entity(1)
     p2 = sched_entity(2)
+    p3 = sched_entity(3)
+    p4 = sched_entity(4)
 
-    # add and remove randomly?
+
+    total_num_ticks = 50
+    curr_tick = 0
+
     place_entity(rq, p1, 0)
     place_entity(rq, p2, 0)
-    rq.curr = p1
-    
-    run_curr(rq, 4000000)
-    run_curr(rq, 4000000)
-    run_curr(rq, 4000000)
-    run_curr(rq, 4000000)
-    run_curr(rq, 4000000)
-    run_curr(rq, 4000000)
-    run_curr(rq, 4000000)
-    run_curr(rq, 4000000)
-    
+    place_entity(rq, p3, 0)
+    place_entity(rq, p4, 0)
 
-    p2_lag = dequeue_entity(rq, p2)
-    place_entity(rq, p2, p2_lag)
-    rq.curr = p2
+    pick_eevdf(rq)
 
-    run_curr(rq, 4000000)
-    run_curr(rq, 4000000)
-    run_curr(rq, 4000000)
+    # num ticks to run total
+    # TODO still need to do randomly joining and leaving
+    while curr_tick < total_num_ticks:
 
+        ticks_to_tick = random.randrange(1, 5)
 
-
-
+        for _ in range(ticks_to_tick):
+            run_curr(rq, 4000000)
+        
+        curr_tick += ticks_to_tick
+        pick_eevdf(rq)
 
 
 
@@ -226,6 +230,8 @@ def draw_timeline(events):
     min_pid = min(event.pid for event in events)
     y_offset = (min_pid - 1) * 10  # Offset for the virtual time line
 
+    bar_height = (max_pid * 10 + 10) / (max_pid + 1 - min_pid)
+
     for event in events:
         if event.type == 'run':
             ax.broken_barh([(event.start_real_time, event.end_real_time - event.start_real_time)],
@@ -238,6 +244,9 @@ def draw_timeline(events):
 
         elif event.type == 'leave':
             ax.annotate('↓', xy=(event.start_real_time, event.pid * 10), ha='center', color='red', fontsize=30)
+        
+        elif event.type == 'pick':
+            ax.axvline(x=event.start_real_time, color='gray', linestyle='--')
 
         elif event.type == 'new-req':
             ax.annotate('*', xy=(event.start_real_time, event.pid * 10), ha='center', color='orange', fontsize=20)
