@@ -175,36 +175,53 @@ def main():
 
     rq = rq_struct([])
 
-    linux_boot(rq)
+    random_mixed(rq)
 
     draw_timeline(rq.timeline)
 
 
 
+def random_long(rq : rq_struct):
 
-
-# this is going to vaguely model linux boot behavior 
-def linux_boot(rq : rq_struct):
-    # setup:
     # all procs have default weight and slice
-    p1 = sched_entity(1)
-    p2 = sched_entity(2)
-    p3 = sched_entity(3)
-    p4 = sched_entity(4)
-
+    p1 = sched_entity(1, slice=80000000) # 80 ms
+    p2 = sched_entity(2, slice=60000000) # 60 ms
 
     total_num_ticks = 50
-    curr_tick = 0
 
     place_entity(rq, p1, 0)
     place_entity(rq, p2, 0)
-    place_entity(rq, p3, 0)
-    place_entity(rq, p4, 0)
 
     pick_eevdf(rq)
 
-    # num ticks to run total
     # TODO still need to do randomly joining and leaving
+    curr_tick = 0
+    while curr_tick < total_num_ticks:
+
+        ticks_to_tick = random.randrange(1, 5)
+
+        for _ in range(ticks_to_tick):
+            run_curr(rq, 4000000)
+        
+        curr_tick += ticks_to_tick
+        pick_eevdf(rq)
+
+
+def random_mixed(rq : rq_struct):
+
+    # all procs have default weight and slice
+    p1 = sched_entity(1, slice=80000000) # 80 ms
+    p2 = sched_entity(2)
+
+    total_num_ticks = 50
+
+    place_entity(rq, p1, 0)
+    place_entity(rq, p2, 0)
+
+    pick_eevdf(rq)
+
+    # TODO still need to do randomly joining and leaving
+    curr_tick = 0
     while curr_tick < total_num_ticks:
 
         ticks_to_tick = random.randrange(1, 5)
@@ -219,6 +236,34 @@ def linux_boot(rq : rq_struct):
 
 
 
+def random_short(rq : rq_struct):
+
+    # all procs have default weight and slice
+    p1 = sched_entity(1)
+    p2 = sched_entity(2)
+    p3 = sched_entity(3)
+    p4 = sched_entity(4)
+
+    total_num_ticks = 50
+
+    place_entity(rq, p1, 0)
+    place_entity(rq, p2, 0)
+    place_entity(rq, p3, 0)
+    place_entity(rq, p4, 0)
+
+    pick_eevdf(rq)
+
+    # TODO still need to do randomly joining and leaving
+    curr_tick = 0
+    while curr_tick < total_num_ticks:
+
+        ticks_to_tick = random.randrange(1, 5)
+
+        for _ in range(ticks_to_tick):
+            run_curr(rq, 4000000)
+        
+        curr_tick += ticks_to_tick
+        pick_eevdf(rq)
 
 
 
