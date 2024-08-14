@@ -50,6 +50,21 @@ class scheduling_event:
 
 verbose : bool = True
 
+
+def print_rq(rq : rq_struct):
+    print(f"virt_time: {rq.virt_time:.1f}")
+    print("  total_load : ", rq.total_load)
+    print("  curr : ", rq.curr)
+    print("  procs: ")
+    for s in rq.all_procs:
+        print_se(rq, s)
+
+def print_se(rq : rq_struct, se : sched_entity):
+    print(f"   pid: {se.pid}, weight: {se.weight}, te: {se.time_eligible:.1f}, dl: {se.deadline:.1f}, time_gotten_in_slice: {se.time_gotten_in_slice}, lag: {get_lag(rq, se):.1f}, virt_time_placed: {se.virt_time_placed}")
+
+
+
+
 def pick_eevdf(rq : rq_struct):
     next_se = max(rq.all_procs, key=lambda s: s.deadline)
     min_deadline : int = next_se.deadline
@@ -68,7 +83,7 @@ def pick_eevdf(rq : rq_struct):
 
 
 def entity_eligible(rq : rq_struct, se : sched_entity) -> bool:
-    return rq.virt_time >= se.time_eligible or lag(rq, se) > 0
+    return rq.virt_time >= se.time_eligible or get_lag(rq, se) > 0
 
 
 def update_deadline(rq: rq_struct) -> bool:
@@ -119,7 +134,7 @@ def run_curr(rq: rq_struct, amount_to_tick : int, pid : int = None) -> bool:
     
 
 
-def lag(rq : rq_struct, se : sched_entity) -> float:
+def get_lag(rq : rq_struct, se : sched_entity) -> float:
     
     ideal_service : int = se.weight * (rq.virt_time - se.virt_time_placed)
     real_service : int = se.runtime_since_placed
@@ -139,6 +154,7 @@ def place_entity(rq : rq_struct, se : sched_entity, lag : float):
         rq.virt_time -= lag / rq.total_load
 
     se.runtime_since_placed = 0
+    se.virt_time_placed = rq.virt_time
 
     se.time_eligible = rq.virt_time - (se.time_gotten_in_slice / se.weight)
     se.deadline = se.time_eligible + (se.slice / se.weight)
@@ -161,7 +177,7 @@ def dequeue_entity(rq : rq_struct, se : sched_entity) -> float:
     rq.all_procs.remove(se)
     rq.total_load -= se.weight
 
-    p_lag = lag(rq, se)
+    p_lag = get_lag(rq, se)
 
     if rq.total_load > 0:
         rq.virt_time += p_lag / rq.total_load
@@ -183,6 +199,8 @@ def main():
     rq = rq_struct([])
 
     run_from_linux_output_file(rq)
+
+    print_rq(rq)
 
     draw_timeline(rq.timeline, True)
 
