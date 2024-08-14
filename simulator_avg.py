@@ -11,11 +11,10 @@ class sched_entity:
     # constants
     pid: int
     slice: int = 4000000
-    weight: int = 1024
+    weight: int = 1024  # (not per unit weight yet)
 
     # per era items -- used to calc lag
-    runtime_since_placed: int = 0
-    virt_time_placed : int = 0
+    vruntime : int = 0
 
     # per request items
     time_eligible: int = 0
@@ -26,8 +25,8 @@ class sched_entity:
 @dataclass
 class rq_struct:
     all_procs: list[sched_entity]
-    virt_time: int = 0
-    total_load: int = 0
+    avg_vrt: int = 0
+    num_running: int = 0
     curr: Optional[sched_entity] = None
 
     timeline : list[scheduling_event] = field(default_factory=list)
@@ -52,15 +51,15 @@ verbose : bool = True
 
 
 def print_rq(rq : rq_struct):
-    print(f"virt_time: {rq.virt_time:.1f}")
-    print("  total_load : ", rq.total_load)
+    print(f"avg_vrt: {rq.avg_vrt:.1f}")
+    print("  num_running : ", rq.num_running)
     print("  curr : ", rq.curr)
     print("  procs: ")
     for s in rq.all_procs:
         print_se(rq, s)
 
 def print_se(rq : rq_struct, se : sched_entity):
-    print(f"   pid: {se.pid}, weight: {se.weight}, te: {se.time_eligible:.1f}, dl: {se.deadline:.1f}, time_gotten_in_slice: {se.time_gotten_in_slice}, lag: {get_lag(rq, se):.1f}, virt_time_placed: {se.virt_time_placed}")
+    print(f"   pid: {se.pid}, weight: {se.weight}, te: {se.time_eligible:.1f}, dl: {se.deadline:.1f}, time_gotten_in_slice: {se.time_gotten_in_slice}, lag: {get_lag(rq, se):.1f}, vruntime: {se.vruntime}")
 
 
 
@@ -76,14 +75,14 @@ def pick_eevdf(rq : rq_struct):
     
     rq.curr = next_se
 
-    event = scheduling_event(rq.curr.pid, "pick", rq.real_time, rq.virt_time, rq.real_time, rq.virt_time, rq.curr.time_eligible, rq.curr.deadline)
+    event = scheduling_event(rq.curr.pid, "pick", rq.real_time, rq.avg_vrt, rq.real_time, rq.avg_vrt, rq.curr.time_eligible, rq.curr.deadline)
     if verbose:
         print(event)
     rq.timeline.append(event)
 
 
 def entity_eligible(rq : rq_struct, se : sched_entity) -> bool:
-    return rq.virt_time >= se.time_eligible or get_lag(rq, se) > 0
+    return rq.avg_vrt >= se.time_eligible or get_lag(rq, se) > 0
 
 
 def update_deadline(rq: rq_struct) -> bool:
@@ -94,10 +93,10 @@ def update_deadline(rq: rq_struct) -> bool:
         return False
 
     curr.time_eligible = curr.deadline
-    curr.deadline = curr.time_eligible + (curr.slice / curr.weight)
+    curr.deadline = curr.time_eligible + curr.slice
 
 
-    event = scheduling_event(rq.curr.pid, "new-req", rq.real_time, rq.virt_time, rq.real_time, rq.virt_time, curr.time_eligible, curr.deadline)
+    event = scheduling_event(rq.curr.pid, "new-req", rq.real_time, rq.avg_vrt, rq.real_time, rq.avg_vrt, curr.time_eligible, curr.deadline)
     if verbose:
         print(event)
     rq.timeline.append(event)
@@ -117,18 +116,18 @@ def run_curr(rq: rq_struct, amount_to_tick : int, pid : int = None) -> bool:
     
     curr : sched_entity = rq.curr
 
-    event = scheduling_event(rq.curr.pid, "run", rq.real_time, rq.virt_time, rq.real_time + amount_to_tick, 
-                             rq.virt_time +  amount_to_tick / rq.total_load, curr.time_eligible, curr.deadline)
+    event = scheduling_event(rq.curr.pid, "run", rq.real_time, rq.avg_vrt, rq.real_time + amount_to_tick, 
+                             rq.avg_vrt +  amount_to_tick / rq.num_running, curr.time_eligible, curr.deadline)
     if verbose:
         print(event)
     rq.timeline.append(event)
 
-    curr.runtime_since_placed += amount_to_tick
+    curr.vruntime += amount_to_tick
     curr.time_gotten_in_slice += amount_to_tick
 
     rq.real_time += amount_to_tick
 
-    rq.virt_time += amount_to_tick / rq.total_load 
+    rq.avg_vrt += amount_to_tick / rq.num_running
 
     update_deadline(rq)
     
@@ -136,31 +135,26 @@ def run_curr(rq: rq_struct, amount_to_tick : int, pid : int = None) -> bool:
 
 def get_lag(rq : rq_struct, se : sched_entity) -> float:
     
-    ideal_service : int = se.weight * (rq.virt_time - se.virt_time_placed)
-    real_service : int = se.runtime_since_placed
-
-    return ideal_service - real_service
+    return rq.avg_vrt - se.vruntime
 
 
-def place_entity(rq : rq_struct, se : sched_entity, lag : float):
+def place_entity(rq : rq_struct, se : sched_entity, lag : int):
     
     rq.all_procs.append(se)
 
-    rq.total_load += se.weight
+    rq.num_running += 1
 
-    og_virt_time = rq.virt_time
+    og_avg_vrt = rq.avg_vrt
 
-    if rq.total_load > 0:
-        rq.virt_time -= lag / rq.total_load
+    se.vruntime = rq.avg_vrt - lag
 
-    se.runtime_since_placed = 0
-    se.virt_time_placed = rq.virt_time
+    rq.avg_vrt = sum(s.vruntime for s in rq.all_procs) / rq.num_running
 
-    se.time_eligible = rq.virt_time - (se.time_gotten_in_slice / se.weight)
-    se.deadline = se.time_eligible + (se.slice / se.weight)
+    se.time_eligible = rq.avg_vrt - se.time_gotten_in_slice
+    se.deadline = se.time_eligible + se.slice
 
-    event = scheduling_event(se.pid, "join", rq.real_time, og_virt_time, rq.real_time, 
-                             rq.virt_time, se.time_eligible, se.deadline)
+    event = scheduling_event(se.pid, "join", rq.real_time, og_avg_vrt, rq.real_time, 
+                             rq.avg_vrt, se.time_eligible, se.deadline)
     if verbose:
         print(event)
     rq.timeline.append(event)
@@ -172,18 +166,18 @@ def dequeue_entity(rq : rq_struct, se : sched_entity) -> float:
     if (rq.curr == se):
         rq.curr = None
     
-    og_virt_time = rq.virt_time
+    og_avg_vrt = rq.avg_vrt
 
     rq.all_procs.remove(se)
-    rq.total_load -= se.weight
+    rq.num_running -= 1
 
     p_lag = get_lag(rq, se)
 
-    if rq.total_load > 0:
-        rq.virt_time += p_lag / rq.total_load
+    if rq.num_running > 0:
+        rq.avg_vrt = sum(s.vruntime for s in rq.all_procs) / rq.num_running
 
-    event = scheduling_event(se.pid, "leave", rq.real_time, og_virt_time, rq.real_time, 
-                             rq.virt_time, se.time_eligible, se.deadline)
+    event = scheduling_event(se.pid, "leave", rq.real_time, og_avg_vrt, rq.real_time, 
+                             rq.avg_vrt, se.time_eligible, se.deadline)
     if verbose:
         print(event)
     rq.timeline.append(event)
@@ -198,11 +192,11 @@ def main():
 
     rq = rq_struct([])
 
-    run_from_linux_output_file(rq)
+    random_short(rq)
 
-    print_rq(rq)
+    # print_rq(rq)
 
-    draw_timeline(rq.timeline, True)
+    draw_timeline(rq.timeline)
 
 
 
