@@ -172,35 +172,16 @@ def parse_file(file_path, rq : rq):
     with open(file_path, 'r') as file:
         for line in file:
             if 'update_curr' in line:
-                start_index = line.find('delta exec: ') + len('delta exec: ')
-                end_index = line.find(',', start_index)
-                if end_index == -1:
-                    end_index = len(line)
-                vrt_value = line[start_index:end_index].strip()
-
-                start_index = line.find('update_curr ') + len('update_curr ')
-                end_index = line.find(':', start_index)
-                if end_index == -1:
-                    end_index = len(line)
-                pid_value = line[start_index:end_index].strip()
-
-                start_index = line.find('virt time: ') + len('virt time: ')
-                end_index = line.find('\n', start_index)
-                if end_index == -1:
-                    end_index = len(line)
-                new_vrt_value = line[start_index:end_index].strip()
-                vals = new_vrt_value.split(".")
-                actual_vrt_val = int(vals[0]) + (int(vals[1]) / (2**16))
+                vrt_value = get_val('delta exec: ', ',', line)
+                pid_value = get_val('update_curr ', ':', line)
+                new_vrt_value = get_val('virt time: ', '\n', line).split(".")
+                actual_vrt_val = int(new_vrt_value[0]) + (int(new_vrt_value[1]) / (2**16))
 
                 update_curr(rq, int(vrt_value), int(pid_value))
                 print("update ", rq.curr.pid, " by ", vrt_value, " -- V is now ", rq.virt_time, " so curr diff is ", actual_vrt_val - rq.virt_time, " curr's te is now ", rq.curr.time_eligible)
             if 'pick_next_entity' in line:
                 print("pick")
-                start_index = line.find('new_curr: ') + len('new_curr: ')
-                end_index = line.find(' ', start_index)
-                if end_index == -1:
-                    end_index = len(line)
-                new_pid = line[start_index:end_index].strip()
+                new_pid = get_val('new_curr: ', ' ', line)
                 pick_eevdf(rq)
                 if (rq.curr.pid != int(new_pid)):
                     print("ERROR - diff in choice -- lnx: ", new_pid, ", this program: ", rq.curr.pid)
@@ -208,35 +189,11 @@ def parse_file(file_path, rq : rq):
                         if s.pid == int(new_pid):
                             rq.curr = s
             if 'place_entity' in line:
-                start_index = line.find('placing se: ') + len('placing se: ')
-                end_index = line.find(', ', start_index)
-                if end_index == -1: 
-                    end_index = len(line)
-                new_pid = line[start_index:end_index].strip()
-
-                start_index = line.find('weight: ') + len('weight: ')
-                end_index = line.find(', ', start_index)
-                if end_index == -1: 
-                    end_index = len(line)
-                s_weight = line[start_index:end_index].strip()
-
-                start_index = line.find('t_g_i_s: ') + len('t_g_i_s: ')
-                end_index = line.find('\n ', start_index)
-                if end_index == -1: 
-                    end_index = len(line)
-                t_g_i_s = line[start_index:end_index].strip()
-                
-                start_index = line.find('vlag: ') + len('vlag: ')
-                end_index = line.find(', ', start_index)
-                if end_index == -1: 
-                    end_index = len(line)
-                lag = line[start_index:end_index].strip()
-
-                start_index = line.find('new virt_time: ') + len('new virt_time: ')
-                end_index = line.find(', ', start_index)
-                if end_index == -1: 
-                    end_index = len(line)
-                lnx_virt_time_vals = line[start_index:end_index].strip().split(".")
+                new_pid = get_val('placing se: ', ', ', line)
+                s_weight = get_val('weight: ', ', ', line)
+                t_g_i_s = get_val('t_g_i_s: ', '\n ', line)
+                lag = get_val('vlag: ', ', ', line)
+                lnx_virt_time_vals = get_val('new virt_time: ', ', ', line).split(".")
 
                 print("vvvvvvvvvvvvvv")
                 print("before: ")
@@ -254,17 +211,8 @@ def parse_file(file_path, rq : rq):
                 print_rq(rq)
                 print("^^^^^^^^^^^^^^^^^^^^")
             if 'dequeue_entity' in line:
-                start_index = line.find(' task being dequeued ') + len(' task being dequeued ')
-                end_index = line.find(' ', start_index)
-                if end_index == -1: 
-                    end_index = len(line)
-                pid = line[start_index:end_index].strip()
-
-                start_index = line.find('new virt_time: ') + len('new virt_time: ')
-                end_index = line.find(' ', start_index)
-                if end_index == -1: 
-                    end_index = len(line)
-                lnx_virt_time_vals = line[start_index:end_index].strip().split(".")
+                pid = get_val(' task being dequeued ', ' ', line)
+                lnx_virt_time_vals = get_val('new virt_time: ', ' ', line).split(".")
                 actual_vrt_val = int(lnx_virt_time_vals[0]) + (int(lnx_virt_time_vals[1]) / (2**16))
 
                 print("vvvvvvvvvvvvvv")
@@ -280,6 +228,16 @@ def parse_file(file_path, rq : rq):
                         print_rq(rq)
                         print("^^^^^^^^^^^^^^^^^^^^")
                         continue
+
+
+
+def get_val(start : str, end : str, line : str)->str:
+    
+    start_index = line.find(start) + len(start)
+    end_index = line.find(end, start_index)
+    if end_index == -1: 
+        end_index = len(line)
+    return line[start_index:end_index].strip()
 
 
 

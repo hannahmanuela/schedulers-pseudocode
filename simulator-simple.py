@@ -268,6 +268,9 @@ def random_short(rq : rq_struct):
 
 
 
+
+
+
 def draw_timeline(events):
     _, ax = plt.subplots(figsize=(12, 6))
 
