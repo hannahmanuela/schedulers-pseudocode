@@ -91,7 +91,14 @@ def update_deadline(rq: rq_struct) -> bool:
 
     return True
 
-def run_curr(rq: rq_struct, amount_to_tick : int) -> bool:
+def run_curr(rq: rq_struct, amount_to_tick : int, pid : int = None) -> bool:
+
+    # sometimes linux will deq and then imediately re-place the curr proc
+    # this should only be the case when running from linux output, only set the value there
+    if rq.curr is None and pid is not None:
+        for s in rq.all_procs:
+            if s.pid == pid:
+                rq.curr = s
     
     curr : sched_entity = rq.curr
 
@@ -175,9 +182,9 @@ def main():
 
     rq = rq_struct([])
 
-    random_mixed(rq)
+    run_from_linux_output_file(rq)
 
-    draw_timeline(rq.timeline)
+    draw_timeline(rq.timeline, True)
 
 
 
@@ -268,55 +275,120 @@ def random_short(rq : rq_struct):
 
 
 
+def run_from_linux_output_file(rq : rq_struct):
+
+    pid_to_se_and_lag = {}
+
+    with open('out.txt', 'r') as file:
+        for line in file:
+            if 'update_curr' in line:
+                time_run = get_val('delta exec: ', ',', line)
+                pid_value = get_val('update_curr ', ':', line)
+                run_curr(rq, int(time_run), int(pid_value))
+
+            if 'pick_next_entity' in line:
+                new_pid = get_val('new_curr: ', ' ', line)
+                pick_eevdf(rq)
+
+                if (rq.curr.pid != int(new_pid)):
+                    print("ERROR - diff in choice -- lnx: ", new_pid, ", this program: ", rq.curr.pid)
+                    for s in rq.all_procs:
+                        if s.pid == int(new_pid):
+                            rq.curr = s
+    
+            if 'place_entity' in line:
+                new_pid = get_val('placing se: ', ', ', line)
+                s_weight = get_val('weight: ', ', ', line)
+
+                if new_pid in pid_to_se_and_lag:
+                    se_to_add = pid_to_se_and_lag[new_pid][0]
+                    lag = pid_to_se_and_lag[new_pid][1]
+                    pid_to_se_and_lag.__delitem__(new_pid)
+                else:
+                    se_to_add = sched_entity(int(new_pid), weight=int(s_weight))
+                    lag = 0
+
+                place_entity(rq, se_to_add, lag)
+
+            if 'dequeue_entity' in line:
+                pid = get_val(' task being dequeued ', ' ', line)
+
+                for s in rq.all_procs:
+                    if s.pid == int(pid):
+                        lag = dequeue_entity(rq, s)
+                        pid_to_se_and_lag[s.pid] = (s, lag)
+                        break
 
 
 
-def draw_timeline(events):
+def get_val(start : str, end : str, line : str)->str:
+    
+    start_index = line.find(start) + len(start)
+    end_index = line.find(end, start_index)
+    if end_index == -1: 
+        end_index = len(line)
+    return line[start_index:end_index].strip()
+
+
+
+
+
+
+
+
+
+
+def draw_timeline(events, simple : bool = False):
     _, ax = plt.subplots(figsize=(12, 6))
 
     max_pid = max(event.pid for event in events)
     min_pid = min(event.pid for event in events)
     y_offset = (min_pid - 1) * 10  # Offset for the virtual time line
 
-    bar_height = (max_pid * 10 + 10) / (max_pid + 1 - min_pid)
-
     for event in events:
         if event.type == 'run':
             ax.broken_barh([(event.start_real_time, event.end_real_time - event.start_real_time)],
                            (event.pid * 10, 5), facecolors=('tab:blue'))
-            ax.text(event.start_real_time + (event.end_real_time - event.start_real_time) / 2,
-                    event.pid * 10 + 2.5, f'P{event.pid}', ha='center', va='center', color='white')
+            if not simple:
+                ax.text(event.start_real_time + (event.end_real_time - event.start_real_time) / 2, 
+                        event.pid * 10 + 2.5, f'P{event.pid}', ha='center', va='center', color='white')
 
         elif event.type == 'join':
-            ax.annotate('↑', xy=(event.start_real_time, event.pid * 10), ha='center', color='green', fontsize=30)
+            if not simple:
+                ax.annotate('↑', xy=(event.start_real_time, event.pid * 10), ha='center', color='green', fontsize=30)
+            else:
+                ax.annotate('↑', xy=(event.start_real_time, event.pid * 10), ha='center', color='green')
 
         elif event.type == 'leave':
-            ax.annotate('↓', xy=(event.start_real_time, event.pid * 10), ha='center', color='red', fontsize=30)
+            if not simple:
+                ax.annotate('↓', xy=(event.start_real_time, event.pid * 10), ha='center', color='red', fontsize=30)
+            else:
+                ax.annotate('↓', xy=(event.start_real_time, event.pid * 10), ha='center', color='red')
         
-        elif event.type == 'pick':
+        elif event.type == 'pick' and not simple:
             ax.axvline(x=event.start_real_time, color='gray', linestyle='--')
 
-        elif event.type == 'new-req':
+        elif event.type == 'new-req' and not simple:
             ax.annotate('*', xy=(event.start_real_time, event.pid * 10), ha='center', color='orange', fontsize=20)
             ax.text(event.start_real_time - 1000000, event.pid * 10 - 0.3 , f'\n ({event.req_te}, \n {event.req_dl})', 
                     ha='left', va='center', fontsize=8, color='orange')
 
-      
-    virtual_times_by_real_time = defaultdict(list)
-    for event in events:
-        if event.start_virt_time not in virtual_times_by_real_time[event.start_real_time]:
-            virtual_times_by_real_time[event.start_real_time].append(event.start_virt_time)
-        if event.end_virt_time not in virtual_times_by_real_time[event.end_real_time]:
-            virtual_times_by_real_time[event.end_real_time].append(event.end_virt_time)  
+    if not simple:
+        virtual_times_by_real_time = defaultdict(list)
+        for event in events:
+            if event.start_virt_time not in virtual_times_by_real_time[event.start_real_time]:
+                virtual_times_by_real_time[event.start_real_time].append(event.start_virt_time)
+            if event.end_virt_time not in virtual_times_by_real_time[event.end_real_time]:
+                virtual_times_by_real_time[event.end_real_time].append(event.end_virt_time)  
     
-    # Plot the virtual time line
-    ax.hlines(y=y_offset, xmin=0, xmax=max(event.end_real_time for event in events), color='black')
+        # Plot the virtual time line
+        ax.hlines(y=y_offset, xmin=0, xmax=max(event.end_real_time for event in events), color='black')
     
-    # Plot the virtual times
-    for real_time, virt_times in virtual_times_by_real_time.items():
-        ax.vlines(x=real_time, ymin=y_offset - 1, ymax=y_offset + 1, color='black')  # Vertical tick
-        for i, virt_time in enumerate(virt_times):
-            ax.text(real_time, y_offset - 2 - i * 2, f'{virt_time:.1f}', ha='center', va='center', fontsize=8, color='black')
+        # Plot the virtual times
+        for real_time, virt_times in virtual_times_by_real_time.items():
+            ax.vlines(x=real_time, ymin=y_offset - 1, ymax=y_offset + 1, color='black')  # Vertical tick
+            for i, virt_time in enumerate(virt_times):
+                ax.text(real_time, y_offset - 2 - i * 2, f'{virt_time:.1f}', ha='center', va='center', fontsize=8, color='black')
         
     # Main plot settings
     ax.set_ylim(y_offset - 15, max_pid * 10 + 10)
