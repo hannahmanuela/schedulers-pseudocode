@@ -3,8 +3,8 @@ import simulator_avg
 from random import uniform, randrange
 
 
-simulator_avg.verbose = False
-simulator_simple.verbose = False
+simulator_avg.verbose = True
+simulator_simple.verbose = True
 
 
 

@@ -3,7 +3,7 @@ from dataclasses import dataclass, field
 from typing import Optional
 import matplotlib.pyplot as plt
 from collections import defaultdict
-import random
+from random import randrange, uniform
 
 
 @dataclass
@@ -47,8 +47,10 @@ class scheduling_event:
     req_te: float
     req_dl: float
 
+    cls : str = "simple"
 
-verbose : bool = False
+
+verbose : bool = True
 
 
 def print_rq(rq : rq_struct):
@@ -60,7 +62,7 @@ def print_rq(rq : rq_struct):
         print_se(rq, s)
 
 def print_se(rq : rq_struct, se : sched_entity):
-    print(f"   pid: {se.pid}, weight: {se.weight}, te: {se.time_eligible:.1f}, dl: {se.deadline:.1f}, time_gotten_in_slice: {se.time_gotten_in_slice}, lag: {get_lag(rq, se):.1f}, virt_time_placed: {se.virt_time_placed}")
+    print(f"   pid: {se.pid}, weight: {se.weight}, te: {se.time_eligible:.1f}, dl: {se.deadline:.1f}, time_gotten_in_slice: {se.time_gotten_in_slice}, lag: {get_lag(rq, se):.1f}, virt_time_placed: {se.virt_time_placed}, runtime_since_placed: {se.runtime_since_placed:.1f}")
 
 
 
@@ -79,6 +81,7 @@ def pick_eevdf(rq : rq_struct):
     event = scheduling_event(rq.curr.pid, "pick", rq.real_time, rq.virt_time, rq.real_time, rq.virt_time, rq.curr.time_eligible, rq.curr.deadline)
     if verbose:
         print(event)
+        print("simple - sum: ", sum([get_lag(rq, s) for s in rq.all_procs]))
     rq.timeline.append(event)
 
 
@@ -100,6 +103,7 @@ def update_deadline(rq: rq_struct) -> bool:
     event = scheduling_event(rq.curr.pid, "new-req", rq.real_time, rq.virt_time, rq.real_time, rq.virt_time, curr.time_eligible, curr.deadline)
     if verbose:
         print(event)
+        print("simple - sum: ", sum([get_lag(rq, s) for s in rq.all_procs]))
     rq.timeline.append(event)
 
     curr.time_gotten_in_slice = max(curr.time_gotten_in_slice - curr.slice, 0)
@@ -121,6 +125,7 @@ def run_curr(rq: rq_struct, amount_to_tick : int, pid : int = None) -> bool:
                              rq.virt_time +  amount_to_tick / rq.total_load, curr.time_eligible, curr.deadline)
     if verbose:
         print(event)
+        print("simple - sum: ", sum([get_lag(rq, s) for s in rq.all_procs]))
     rq.timeline.append(event)
 
     curr.runtime_since_placed += amount_to_tick
@@ -150,11 +155,11 @@ def place_entity(rq : rq_struct, se : sched_entity, lag : float):
 
     og_virt_time = rq.virt_time
 
+    se.runtime_since_placed = 0
+    se.virt_time_placed = rq.virt_time - (lag / se.weight)
+
     if rq.total_load > 0:
         rq.virt_time -= lag / rq.total_load
-
-    se.runtime_since_placed = 0
-    se.virt_time_placed = rq.virt_time
 
     se.time_eligible = rq.virt_time - (se.time_gotten_in_slice / se.weight)
     se.deadline = se.time_eligible + (se.slice / se.weight)
@@ -162,7 +167,11 @@ def place_entity(rq : rq_struct, se : sched_entity, lag : float):
     event = scheduling_event(se.pid, "join", rq.real_time, og_virt_time, rq.real_time, 
                              rq.virt_time, se.time_eligible, se.deadline)
     if verbose:
+        print("placing pid ", se.pid, " w/ lag ", lag)
         print(event)
+        print("simple - sum: ", sum([get_lag(rq, s) for s in rq.all_procs]))
+        for s in rq.all_procs:
+            print_se(rq, s)
     rq.timeline.append(event)
     
 
@@ -186,6 +195,7 @@ def dequeue_entity(rq : rq_struct, se : sched_entity) -> float:
                              rq.virt_time, se.time_eligible, se.deadline)
     if verbose:
         print(event)
+        print("simple - sum: ", sum([get_lag(rq, s) for s in rq.all_procs]))
     rq.timeline.append(event)
     
 
@@ -198,11 +208,11 @@ def main():
 
     rq = rq_struct([])
 
-    random_short(rq)
+    random_mixed(rq)
 
     # print_rq(rq)
 
-    draw_timeline(rq.timeline)
+    draw_timeline(rq.timeline, True)
 
 
 
@@ -232,32 +242,78 @@ def random_long(rq : rq_struct):
         pick_eevdf(rq)
 
 
-def random_mixed(rq : rq_struct):
+def random_mixed(rq_simple : rq_struct):
 
     # all procs have default weight and slice
-    p1 = sched_entity(1, slice=80000000) # 80 ms
-    p2 = sched_entity(2)
+    p1_simple = sched_entity(1, slice=80000000) # 80 ms
+    p2_simple = sched_entity(2)
 
-    total_num_ticks = 50
+    total_num_ticks = 500
 
-    place_entity(rq, p1, 0)
-    place_entity(rq, p2, 0)
+    place_entity(rq_simple, p1_simple, 0)
+    place_entity(rq_simple, p2_simple, 0)
 
-    pick_eevdf(rq)
+    pick_eevdf(rq_simple)
+
+    p1_removed = False
+    p1_lag_simple = 0
+    p1_lag_avg = 0
+    p2_removed = False
+    p2_lag_simple = 0
+    p2_lag_avg = 0
+
 
     # TODO still need to do randomly joining and leaving
     curr_tick = 0
     while curr_tick < total_num_ticks:
 
-        ticks_to_tick = random.randrange(1, 5)
+        if p1_removed and p2_removed:
+            if uniform(0, 1) > 0.5:
+                print("adding")
+                place_entity(rq_simple, p1_simple, p1_lag_simple)
+                p1_removed = False
+            else:
+                print("adding")
+                place_entity(rq_simple, p2_simple, p2_lag_simple)
+                p2_removed = False
+        elif p1_removed:
+            if uniform(0, 1) > 0.5:
+                print("adding")
+                place_entity(rq_simple, p1_simple, p1_lag_simple)
+                p1_removed = False
+        elif p2_removed:
+            if uniform(0, 1) > 0.5:
+                print("adding")
+                place_entity(rq_simple, p2_simple, p2_lag_simple)
+                p2_removed = False
 
+
+        pick_eevdf(rq_simple)
+
+        ticks_to_tick = randrange(1, 5)
         for _ in range(ticks_to_tick):
-            run_curr(rq, 4000000)
+            run_curr(rq_simple, 4000000)
         
+        if uniform(0, 1) > 0.9:
+            if p1_removed and not p2_removed:
+                print("removing")
+                p2_lag_simple = dequeue_entity(rq_simple, p2_simple)
+                p2_removed = True
+            elif not p1_removed and p2_removed:
+                print("removing")
+                p1_lag_simple = dequeue_entity(rq_simple, p1_simple)
+                p1_removed = True
+            elif not p1_removed and not p2_removed:
+                if randrange(0, 1) > 0.5:
+                    print("removing")
+                    p2_lag_simple = dequeue_entity(rq_simple, p2_simple)
+                    p2_removed = True
+                else:
+                    print("removing")
+                    p1_lag_simple = dequeue_entity(rq_simple, p1_simple)
+                    p1_removed = True
+
         curr_tick += ticks_to_tick
-        pick_eevdf(rq)
-
-
 
 
 
@@ -282,7 +338,7 @@ def random_short(rq : rq_struct):
     curr_tick = 0
     while curr_tick < total_num_ticks:
 
-        ticks_to_tick = random.randrange(1, 5)
+        ticks_to_tick = randrange(1, 5)
 
         for _ in range(ticks_to_tick):
             run_curr(rq, 4000000)

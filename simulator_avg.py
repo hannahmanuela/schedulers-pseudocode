@@ -46,6 +46,7 @@ class scheduling_event:
     req_te: float
     req_dl: float
 
+    cls: str = "avg"
 
 verbose : bool = True
 
