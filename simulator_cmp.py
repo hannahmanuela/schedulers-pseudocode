@@ -3,8 +3,8 @@ import simulator_avg
 from random import uniform, randrange
 
 
-simulator_avg.verbose = True
-simulator_simple.verbose = True
+simulator_avg.verbose = False
+simulator_simple.verbose = False
 
 
 
@@ -31,7 +31,7 @@ def random_mixed(rq_simple : simulator_simple.rq_struct, rq_avg : simulator_avg.
     p2_simple = simulator_simple.sched_entity(2)
     p2_avg = simulator_avg.sched_entity(2)
 
-    total_num_ticks = 500
+    total_num_ticks = 1000
 
     simulator_simple.place_entity(rq_simple, p1_simple, 0)
     simulator_avg.place_entity(rq_avg, p1_avg, 0)
@@ -55,24 +55,20 @@ def random_mixed(rq_simple : simulator_simple.rq_struct, rq_avg : simulator_avg.
 
         if p1_removed and p2_removed:
             if uniform(0, 1) > 0.5:
-                print("adding")
                 simulator_simple.place_entity(rq_simple, p1_simple, p1_lag_simple)
                 simulator_avg.place_entity(rq_avg, p1_avg, p1_lag_avg)
                 p1_removed = False
             else:
-                print("adding")
                 simulator_simple.place_entity(rq_simple, p2_simple, p2_lag_simple)
                 simulator_avg.place_entity(rq_avg, p2_avg, p2_lag_avg)
                 p2_removed = False
         elif p1_removed:
             if uniform(0, 1) > 0.5:
-                print("adding")
                 simulator_simple.place_entity(rq_simple, p1_simple, p1_lag_simple)
                 simulator_avg.place_entity(rq_avg, p1_avg, p1_lag_avg)
                 p1_removed = False
         elif p2_removed:
             if uniform(0, 1) > 0.5:
-                print("adding")
                 simulator_simple.place_entity(rq_simple, p2_simple, p2_lag_simple)
                 simulator_avg.place_entity(rq_avg, p2_avg, p2_lag_avg)
                 p2_removed = False
@@ -90,23 +86,19 @@ def random_mixed(rq_simple : simulator_simple.rq_struct, rq_avg : simulator_avg.
         
         if uniform(0, 1) > 0.9:
             if p1_removed and not p2_removed:
-                print("removing")
                 p2_lag_simple = simulator_simple.dequeue_entity(rq_simple, p2_simple)
                 p2_lag_avg = simulator_avg.dequeue_entity(rq_avg, p2_avg)
                 p2_removed = True
             elif not p1_removed and p2_removed:
-                print("removing")
                 p1_lag_simple = simulator_simple.dequeue_entity(rq_simple, p1_simple)
                 p1_lag_avg = simulator_avg.dequeue_entity(rq_avg, p1_avg)
                 p1_removed = True
             elif not p1_removed and not p2_removed:
                 if randrange(0, 1) > 0.5:
-                    print("removing")
                     p2_lag_simple = simulator_simple.dequeue_entity(rq_simple, p2_simple)
                     p2_lag_avg = simulator_avg.dequeue_entity(rq_avg, p2_avg)
                     p2_removed = True
                 else:
-                    print("removing")
                     p1_lag_simple = simulator_simple.dequeue_entity(rq_simple, p1_simple)
                     p1_lag_avg = simulator_avg.dequeue_entity(rq_avg, p1_avg)
                     p1_removed = True
