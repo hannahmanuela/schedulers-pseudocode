@@ -324,7 +324,7 @@ def run_from_linux_output_file(rq : rq_struct):
                 place_entity(rq, se_to_add, lag)
 
             if 'dequeue_entity' in line:
-                pid = get_val(' task being dequeued ', ' ', line)
+                pid = get_val(' task being dequeued ', ', ', line)
 
                 for s in rq.all_procs:
                     if s.pid == int(pid):

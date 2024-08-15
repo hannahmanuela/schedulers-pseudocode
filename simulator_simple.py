@@ -212,7 +212,7 @@ def main():
 
     # print_rq(rq)
 
-    draw_timeline(rq.timeline, True)
+    draw_timeline(rq.timeline)
 
 
 
@@ -248,7 +248,7 @@ def random_mixed(rq_simple : rq_struct):
     p1_simple = sched_entity(1, slice=80000000) # 80 ms
     p2_simple = sched_entity(2)
 
-    total_num_ticks = 500
+    total_num_ticks = 50
 
     place_entity(rq_simple, p1_simple, 0)
     place_entity(rq_simple, p2_simple, 0)
@@ -385,7 +385,7 @@ def run_from_linux_output_file(rq : rq_struct):
                 place_entity(rq, se_to_add, lag)
 
             if 'dequeue_entity' in line:
-                pid = get_val(' task being dequeued ', ' ', line)
+                pid = get_val(' task being dequeued ', ', ', line)
 
                 for s in rq.all_procs:
                     if s.pid == int(pid):

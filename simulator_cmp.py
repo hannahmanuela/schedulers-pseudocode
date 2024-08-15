@@ -4,6 +4,7 @@ from random import uniform, randrange
 
 
 simulator_avg_weighted.verbose = False
+simulator_avg_weighted.print_match_linux = False
 simulator_simple.verbose = False
 
 

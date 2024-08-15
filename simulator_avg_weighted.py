@@ -47,6 +47,7 @@ class scheduling_event:
     cls: str = "avg"
 
 verbose : bool = False
+print_match_linux = True
 
 
 def print_rq(rq : rq_struct):
@@ -71,6 +72,9 @@ def pick_eevdf(rq : rq_struct):
         if se.deadline < min_deadline and entity_eligible(rq, se):
             min_deadline = se.deadline
             next_se = se
+    
+    if print_match_linux:
+        print(f"pick_next_entity: curr: {rq.curr.pid if rq.curr else -1}, new_curr: {next_se.pid}")
     
     rq.curr = next_se
 
@@ -128,6 +132,9 @@ def run_curr(rq: rq_struct, amount_to_tick : int, pid : int = None) -> bool:
 
     rq.avg_vrt += amount_to_tick * curr.weight / rq.total_load
 
+    if print_match_linux:
+        print(f"update_curr {curr.pid}, delta_exec: {amount_to_tick}, new avg vrt: {rq.avg_vrt}")
+
     update_deadline(rq)
     
 
@@ -151,6 +158,9 @@ def place_entity(rq : rq_struct, se : sched_entity, lag : int):
 
     se.time_eligible = rq.avg_vrt - se.time_gotten_in_slice
     se.deadline = se.time_eligible + se.slice
+
+    if print_match_linux:
+        print(f"place_entity placing se: {se.pid}, w/ weight: {se.weight}, vlag: {lag},  vrt: {se.vruntime}, new te val: {se.time_eligible}, t_g_i_s: {se.time_gotten_in_slice}")
     
     event = scheduling_event(se.pid, "join", rq.real_time, og_avg_vrt, rq.real_time, 
                              rq.avg_vrt, se.time_eligible, se.deadline)
@@ -171,9 +181,13 @@ def dequeue_entity(rq : rq_struct, se : sched_entity) -> float:
     rq.total_load -= se.weight
 
     p_lag = get_lag(rq, se)
+    clamped_lag = max(-2 * se.slice, min(p_lag, 2 * se.slice))
 
     if rq.total_load > 0:
         rq.avg_vrt = sum(s.weight * s.vruntime for s in rq.all_procs) / rq.total_load
+    
+    if print_match_linux:
+        print(f"dequeue_entity: curr: {rq.curr.pid if rq.curr else -1}, task being dequeued {se.pid}, it's lag: {clamped_lag}")
 
     event = scheduling_event(se.pid, "leave", rq.real_time, og_avg_vrt, rq.real_time, 
                              rq.avg_vrt, se.time_eligible, se.deadline)
@@ -182,7 +196,7 @@ def dequeue_entity(rq : rq_struct, se : sched_entity) -> float:
     rq.timeline.append(event)
     
 
-    return p_lag
+    return clamped_lag
 
 
 
@@ -319,10 +333,13 @@ def run_from_linux_output_file(rq : rq_struct):
                     se_to_add = sched_entity(int(new_pid), weight=int(s_weight))
                     lag = 0
 
+                if int(new_pid) in [s.pid for s in rq.all_procs]:
+                    print(line)
+                    exit(-1)
                 place_entity(rq, se_to_add, lag)
 
             if 'dequeue_entity' in line:
-                pid = get_val(' task being dequeued ', ' ', line)
+                pid = get_val(' task being dequeued ', ', ', line)
 
                 for s in rq.all_procs:
                     if s.pid == int(pid):
